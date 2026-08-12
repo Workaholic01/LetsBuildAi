@@ -35,7 +35,7 @@ dotnet-agent-crash-course/
     └── ...
 ```
 
-Every article uses a separate runnable console project. That keeps examples focused and lets readers compare milestones. Provider configuration follows the same shape throughout the series.
+Every article uses a separate runnable console project. That keeps examples focused and let you compare milestones. Provider configuration follows the same shape throughout the series.
 
 ## Article contract
 
