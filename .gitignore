@@ -1,0 +1,7 @@
+﻿################################################################################
+# This .gitignore file was automatically created by Microsoft(R) Visual Studio.
+################################################################################
+
+/agentic-ai-crash-course/starter-agent/StarterAgent/.vs
+/agentic-ai-crash-course/starter-agent/StarterAgent/bin/Debug/net10.0
+/agentic-ai-crash-course/starter-agent/StarterAgent/obj
