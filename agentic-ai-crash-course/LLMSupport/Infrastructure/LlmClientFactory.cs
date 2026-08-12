@@ -1,9 +1,9 @@
 ﻿using System.ClientModel;
 using OpenAI;
 using OpenAI.Chat;
-using StarterAgent.Configuration;
+using LLMSupport.Configuration;
 
-namespace StarterAgent.Infrastructure;
+namespace LLMSupport.Infrastructure;
 
 public static class LlmClientFactory
 {

@@ -1,11 +1,11 @@
 ﻿# Part 1: Build a Provider-Configurable Starter Agent in .NET
 
 **Status:** Complete  
-**Series:** [Building AI Agents in .NET](../../../README.md)
+**Series:** [Building AI Agents in .NET](../../README.md)
 
 A minimal multi-turn AI agent built with C# and the official OpenAI .NET client. The same application can run with either **OpenAI** or **OpenRouter** through configuration—no C# changes required when switching providers.
 
-> **Course:** Part 1 of *Building AI Agents in .NET*  
+> **Course:** Part 1 of _Building AI Agents in .NET_  
 > **Next:** Part 2 — Structured Outputs
 
 ## Features
@@ -33,23 +33,30 @@ flowchart TD
 
 The application keeps three concerns separate:
 
-| Concern | Responsibility |
-| --- | --- |
-| Configuration | Selects the provider, endpoint, model, and API key |
-| Client factory | Creates one `ChatClient` for the selected provider |
-| Agent | Combines instructions, model access, and conversation history |
+| Concern        | Responsibility                                                |
+| -------------- | ------------------------------------------------------------- |
+| Configuration  | Selects the provider, endpoint, model, and API key            |
+| Client factory | Creates one `ChatClient` for the selected provider            |
+| Agent          | Combines instructions, model access, and conversation history |
+
+Configuration and the client factory live in a shared `LLMSupport` class library rather than inside `StarterAgent` itself. Every project in the series references `LLMSupport`, so those two concerns are defined exactly once for the whole course.
 
 ## Project structure
 
 ```text
-StarterAgent/
-├── Agents/
-│   ├── Agent.cs
-│   └── PersonalAssistantAgent.cs
+LLMSupport/
 ├── Configuration/
 │   └── LlmOptions.cs
 ├── Infrastructure/
 │   └── LlmClientFactory.cs
+└── LLMSupport.csproj
+```
+
+```text
+a-starter-agent/
+├── Agents/
+│   ├── Agent.cs
+│   └── PersonalAssistantAgent.cs
 ├── appsettings.json
 ├── Program.cs
 └── StarterAgent.csproj
@@ -57,45 +64,57 @@ StarterAgent/
 
 ## Prerequisites
 
-- A .NET SDK supported by the current `OpenAI` package
+- A .NET SDK supported by the current `OpenAI` package (this series targets `net10.0`)
 - An OpenAI or OpenRouter API key
 - Basic familiarity with C# and `async`/`await`
 
 ## Setup
 
-The commands below assume you are running them from the solution root.
+The commands below assume you are running them from the `agentic-ai-crash-course` solution root, next to `AgenticAiCrashCourse.slnx`.
 
-### 1. Create the project
+### 1. Create the shared provider-configuration library
+
+Every article in this series reuses the same provider configuration and `ChatClient` creation logic. Define it once in a shared class library:
 
 ```bash
-dotnet new console --name StarterAgent --output src/StarterAgent
-dotnet sln add src/StarterAgent/StarterAgent.csproj
+dotnet new classlib --name LLMSupport --output LLMSupport
+dotnet sln add LLMSupport/LLMSupport.csproj
+dotnet add LLMSupport package OpenAI
 ```
 
-### 2. Install the packages
+### 2. Create the starter-agent project
 
 ```bash
-dotnet add src/StarterAgent package OpenAI
-dotnet add src/StarterAgent package Microsoft.Extensions.Configuration.Json
-dotnet add src/StarterAgent package Microsoft.Extensions.Configuration.EnvironmentVariables
-dotnet add src/StarterAgent package Microsoft.Extensions.Configuration.UserSecrets
-dotnet add src/StarterAgent package Microsoft.Extensions.Configuration.Binder
+dotnet new console --name StarterAgent --output a-starter-agent
+dotnet sln add a-starter-agent/StarterAgent.csproj
+dotnet add a-starter-agent reference LLMSupport
+```
+
+### 3. Install the packages
+
+```bash
+dotnet add a-starter-agent package OpenAI
+dotnet add a-starter-agent package Microsoft.Extensions.Configuration
+dotnet add a-starter-agent package Microsoft.Extensions.Configuration.Json
+dotnet add a-starter-agent package Microsoft.Extensions.Configuration.EnvironmentVariables
+dotnet add a-starter-agent package Microsoft.Extensions.Configuration.UserSecrets
+dotnet add a-starter-agent package Microsoft.Extensions.Configuration.Binder
 ```
 
 Initialize user secrets:
 
 ```bash
-dotnet user-secrets init --project src/StarterAgent
+dotnet user-secrets init --project a-starter-agent
 ```
 
-### 3. Copy `appsettings.json` to the output directory
+### 4. Copy `appsettings.json` to the output directory
 
 Add this inside the `<Project>` element in `StarterAgent.csproj`:
 
 ```xml
 <ItemGroup>
   <None Update="appsettings.json">
-    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
   </None>
 </ItemGroup>
 ```
@@ -132,7 +151,7 @@ For OpenAI:
 dotnet user-secrets set \
   "Llm:Providers:OpenAI:ApiKey" \
   "YOUR_OPENAI_KEY" \
-  --project src/StarterAgent
+  --project a-starter-agent
 ```
 
 For OpenRouter:
@@ -141,7 +160,7 @@ For OpenRouter:
 dotnet user-secrets set \
   "Llm:Providers:OpenRouter:ApiKey" \
   "YOUR_OPENROUTER_KEY" \
-  --project src/StarterAgent
+  --project a-starter-agent
 ```
 
 You only need to configure the provider you intend to use. Never commit API keys to `appsettings.json` or source control.
@@ -157,10 +176,10 @@ export Llm__Providers__OpenRouter__ApiKey="YOUR_OPENROUTER_KEY"
 
 ### LLM configuration model
 
-Create `Configuration/LlmOptions.cs`:
+`LlmOptions` lives in the shared `LLMSupport` project so every part of the series can reuse it. Create `LLMSupport/Configuration/LlmOptions.cs`:
 
 ```csharp
-namespace StarterAgent.Configuration;
+namespace LLMSupport.Configuration;
 
 public sealed class LlmOptions
 {
@@ -194,15 +213,15 @@ public sealed class LlmProviderOptions
 
 ### Provider-neutral client factory
 
-Create `Infrastructure/LlmClientFactory.cs`:
+`LlmClientFactory` also lives in `LLMSupport`. Create `LLMSupport/Infrastructure/LlmClientFactory.cs`:
 
 ```csharp
 using System.ClientModel;
 using OpenAI;
 using OpenAI.Chat;
-using StarterAgent.Configuration;
+using LLMSupport.Configuration;
 
-namespace StarterAgent.Infrastructure;
+namespace LLMSupport.Infrastructure;
 
 public static class LlmClientFactory
 {
@@ -240,6 +259,8 @@ public static class LlmClientFactory
 ```
 
 Only this factory knows how provider settings become an SDK client. The rest of the application depends on `ChatClient`.
+
+`StarterAgent` references `LLMSupport` with a project reference (`<ProjectReference Include="..\LLMSupport\LLMSupport.csproj" />`), so it consumes these two types without redefining them.
 
 ### Reusable agent
 
@@ -356,8 +377,8 @@ Replace `Program.cs`:
 using Microsoft.Extensions.Configuration;
 using OpenAI.Chat;
 using StarterAgent.Agents;
-using StarterAgent.Configuration;
-using StarterAgent.Infrastructure;
+using LLMSupport.Configuration;
+using LLMSupport.Infrastructure;
 
 IConfiguration configuration = new ConfigurationBuilder()
     .SetBasePath(AppContext.BaseDirectory)
@@ -425,7 +446,7 @@ while (true)
 ## Run the agent
 
 ```bash
-dotnet run --project src/StarterAgent
+dotnet run --project a-starter-agent
 ```
 
 Try a multi-turn conversation:
@@ -444,10 +465,10 @@ The second answer can refer to the first message because the application sends t
 
 ### Console commands
 
-| Command | Effect |
-| --- | --- |
+| Command  | Effect                                                                   |
+| -------- | ------------------------------------------------------------------------ |
 | `/reset` | Clears user and assistant history while retaining the agent instructions |
-| `/exit` | Ends the application |
+| `/exit`  | Ends the application                                                     |
 
 After `/reset`, the agent should no longer know facts from earlier turns.
 
@@ -467,7 +488,7 @@ Or override it without editing the file:
 
 ```bash
 export Llm__Provider="OpenRouter"
-dotnet run --project src/StarterAgent
+dotnet run --project a-starter-agent
 ```
 
 The agent and console code remain unchanged.
@@ -489,7 +510,7 @@ The agent and console code remain unchanged.
 Confirm the secret exists for this project:
 
 ```bash
-dotnet user-secrets list --project src/StarterAgent
+dotnet user-secrets list --project a-starter-agent
 ```
 
 ### `appsettings.json` cannot be found
@@ -498,7 +519,7 @@ Confirm the file exists and the project includes:
 
 ```xml
 <None Update="appsettings.json">
-  <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+  <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 </None>
 ```
 
@@ -525,7 +546,7 @@ Check that:
 
 ## Next in the series
 
-Part 2, *Type-Safe Structured Outputs in .NET*, replaces free-form responses with strict JSON Schema and deserializes the result into a C# support-ticket model.
+Part 2, _Type-Safe Structured Outputs in .NET_, replaces free-form responses with strict JSON Schema and deserializes the result into a C# support-ticket model.
 
 ## References
 

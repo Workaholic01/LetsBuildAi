@@ -1,10 +1,10 @@
-﻿using AgenticAiCrashCourse.Configuration;
-using AgenticAiCrashCourse.Infrastructure;
-using AgenticAiCrashCourse.StructuredOutputAgent.Agents;
-using AgenticAiCrashCourse.StructuredOutputAgent.Models;
-using AgenticAiCrashCourse.StructuredOutputAgent.Serialization;
+﻿using LLMSupport.Configuration;
+using LLMSupport.Infrastructure;
+using StructuredOutputAgent.Agents;
 using Microsoft.Extensions.Configuration;
 using OpenAI.Chat;
+using StructuredOutputAgent.Models;
+using StructuredOutputAgent.Serialization;
 using System.Text.Json;
 
 IConfiguration configuration = new ConfigurationBuilder()

@@ -1,6 +1,6 @@
 ﻿using System.Text.Json;
 
-namespace AgenticAiCrashCourse.StructuredOutputAgent.Schemas;
+namespace StructuredOutputAgent.Schemas;
 
 public static class SupportTicketSchema
 {

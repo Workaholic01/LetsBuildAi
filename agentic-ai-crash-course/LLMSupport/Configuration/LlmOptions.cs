@@ -1,4 +1,4 @@
-﻿namespace StarterAgent.Configuration;
+﻿namespace LLMSupport.Configuration;
 
 public sealed class LlmOptions
 {

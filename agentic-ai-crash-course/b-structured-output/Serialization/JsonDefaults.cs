@@ -1,7 +1,7 @@
 ﻿using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace AgenticAiCrashCourse.StructuredOutputAgent.Serialization
+namespace StructuredOutputAgent.Serialization
 {
     public static class JsonDefaults
     {

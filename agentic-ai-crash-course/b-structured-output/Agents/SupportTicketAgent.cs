@@ -1,11 +1,11 @@
-﻿using AgenticAiCrashCourse.StructuredOutputAgent.Models;
-using AgenticAiCrashCourse.StructuredOutputAgent.Schemas;
-using AgenticAiCrashCourse.StructuredOutputAgent.Serialization;
+﻿using StructuredOutputAgent.Models;
+using StructuredOutputAgent.Schemas;
+using StructuredOutputAgent.Serialization;
 using OpenAI.Chat;
 using System.Text;
 using System.Text.Json;
 
-namespace AgenticAiCrashCourse.StructuredOutputAgent.Agents;
+namespace StructuredOutputAgent.Agents;
 
 public sealed class SupportTicketAgent
 {

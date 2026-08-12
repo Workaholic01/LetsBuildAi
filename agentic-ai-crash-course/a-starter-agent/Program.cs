@@ -1,8 +1,8 @@
 ﻿using Microsoft.Extensions.Configuration;
 using OpenAI.Chat;
 using StarterAgent.Agents;
-using StarterAgent.Configuration;
-using StarterAgent.Infrastructure;
+using LLMSupport.Configuration;
+using LLMSupport.Infrastructure;
 
 IConfiguration configuration = new ConfigurationBuilder()
     .SetBasePath(AppContext.BaseDirectory)

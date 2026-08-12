@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="a-starter-agent/StarterAgent.csproj" />
+  <Project Path="b-structured-output/StructuredOutputAgent.csproj" />
+  <Project Path="LLMSupport/LLMSupport.csproj" />
+</Solution>

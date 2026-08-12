@@ -1,7 +1,7 @@
 # Part 2: Type-Safe Structured Outputs in .NET
 
 **Status:** In progress  
-**Builds on:** [Part 1 — Starter agent](01-starter-agent.md)
+**Builds on:** [Part 1 — Starter agent](../a-starter-agent/01-starter-agent.md)
 
 ## The problem
 
@@ -40,42 +40,46 @@ A support-ticket agent that converts an unstructured customer complaint into:
 
 ## Step 1: Create the project
 
-From the solution root:
+From the solution root (`agentic-ai-crash-course`, next to `AgenticAiCrashCourse.slnx`):
 
 ```bash
-dotnet new console --name StructuredOutputAgent --output src/StructuredOutputAgent
-dotnet sln add src/StructuredOutputAgent/StructuredOutputAgent.csproj
+dotnet new console --name StructuredOutputAgent --output b-structured-output
+dotnet sln add b-structured-output/StructuredOutputAgent.csproj
+dotnet add b-structured-output reference LLMSupport
 
-dotnet add src/StructuredOutputAgent package OpenAI
-dotnet add src/StructuredOutputAgent package Microsoft.Extensions.Configuration.Json
-dotnet add src/StructuredOutputAgent package Microsoft.Extensions.Configuration.EnvironmentVariables
-dotnet add src/StructuredOutputAgent package Microsoft.Extensions.Configuration.UserSecrets
-dotnet add src/StructuredOutputAgent package Microsoft.Extensions.Configuration.Binder
+dotnet add b-structured-output package OpenAI
+dotnet add b-structured-output package Microsoft.Extensions.Configuration
+dotnet add b-structured-output package Microsoft.Extensions.Configuration.Json
+dotnet add b-structured-output package Microsoft.Extensions.Configuration.EnvironmentVariables
+dotnet add b-structured-output package Microsoft.Extensions.Configuration.UserSecrets
+dotnet add b-structured-output package Microsoft.Extensions.Configuration.Binder
 
-dotnet user-secrets init --project src/StructuredOutputAgent
+dotnet user-secrets init --project b-structured-output
 ```
 
-Copy these provider-layer files from `StarterAgent` into the same relative locations under `StructuredOutputAgent`:
+Part 1 already extracted provider configuration and `ChatClient` creation into the shared `LLMSupport` class library, so `StructuredOutputAgent` references that project instead of recreating its own copy.
 
-```text
-Configuration/LlmOptions.cs
-Infrastructure/LlmClientFactory.cs
-appsettings.json
+Copy `appsettings.json` from `a-starter-agent` into `b-structured-output`, then add the same copy rule to the new project file:
+
+```xml
+<ItemGroup>
+  <None Update="appsettings.json">
+    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+  </None>
+</ItemGroup>
 ```
-
-Change their namespaces from `StarterAgent` to `StructuredOutputAgent`, then add the same `appsettings.json` copy rule to the new project file.
 
 Copy only the API key you need into this project's user-secrets store. User secrets are project-specific.
 
 Run the empty project before continuing:
 
 ```bash
-dotnet run --project src/StructuredOutputAgent
+dotnet run --project b-structured-output
 ```
 
-## Design note: copy now, extract later
+## Design note: one shared provider layer
 
-At this early stage, duplicating two small provider-layer files keeps each tutorial runnable on its own. After the patterns stabilize, the series can extract them into a shared class library without obscuring the learning objective of Part 2.
+Because `LlmOptions` and `LlmClientFactory` already live in `LLMSupport`, Part 2 does not restate them. Every article in the series references the same `LLMSupport` project, so provider selection, endpoint configuration, and `ChatClient` creation are defined exactly once. This keeps each tutorial focused on the concept it introduces instead of re-explaining the provider layer.
 
 ## Step 2: Define the typed output contract
 
@@ -129,7 +133,7 @@ At this point, do not add JSON-specific attributes or prompt instructions to the
 Verify that the project compiles:
 
 ```bash
-dotnet build src/StructuredOutputAgent/StructuredOutputAgent.csproj
+dotnet build b-structured-output/StructuredOutputAgent.csproj
 ```
 
 The project will still print `Hello, World!`. That is expected—we have defined the output contract but have not called the model yet.
@@ -211,13 +215,13 @@ public static class SupportTicketSchema
 
 The schema mirrors the C# contract exactly:
 
-| C# member | JSON property | JSON type |
-| --- | --- | --- |
-| `Title` | `title` | string |
-| `Category` | `category` | constrained string |
-| `Priority` | `priority` | constrained string |
-| `Summary` | `summary` | string |
-| `SuggestedActions` | `suggestedActions` | array of strings |
+| C# member          | JSON property      | JSON type          |
+| ------------------ | ------------------ | ------------------ |
+| `Title`            | `title`            | string             |
+| `Category`         | `category`         | constrained string |
+| `Priority`         | `priority`         | constrained string |
+| `Summary`          | `summary`          | string             |
+| `SuggestedActions` | `suggestedActions` | array of strings   |
 
 Three details make the schema strict:
 
@@ -244,7 +248,7 @@ Console.WriteLine(
 Run the project:
 
 ```bash
-dotnet run --project src/StructuredOutputAgent
+dotnet run --project b-structured-output
 ```
 
 Expected output:
@@ -332,7 +336,7 @@ Console.WriteLine(
 Run it:
 
 ```bash
-dotnet run --project src/StructuredOutputAgent
+dotnet run --project b-structured-output
 ```
 
 The first line should be:
@@ -466,8 +470,8 @@ using System.Text.Json;
 using Microsoft.Extensions.Configuration;
 using OpenAI.Chat;
 using StructuredOutputAgent.Agents;
-using StructuredOutputAgent.Configuration;
-using StructuredOutputAgent.Infrastructure;
+using LLMSupport.Configuration;
+using LLMSupport.Infrastructure;
 using StructuredOutputAgent.Models;
 using StructuredOutputAgent.Serialization;
 
@@ -511,7 +515,7 @@ Console.WriteLine(
 Run the application:
 
 ```bash
-dotnet run --project src/StructuredOutputAgent
+dotnet run --project b-structured-output
 ```
 
 Try this input:

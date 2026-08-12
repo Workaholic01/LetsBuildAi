@@ -1,4 +1,4 @@
-﻿namespace AgenticAiCrashCourse.StructuredOutputAgent.Models;
+﻿namespace StructuredOutputAgent.Models;
 
 public sealed record SupportTicket
 {
