@@ -2,6 +2,9 @@
 # This .gitignore file was automatically created by Microsoft(R) Visual Studio.
 ################################################################################
 
-/agentic-ai-crash-course/starter-agent/.vs
-/agentic-ai-crash-course/starter-agent/bin/Debug/net10.0
-/agentic-ai-crash-course/starter-agent/obj
+/agentic-ai-crash-course/a-starter-agent/.vs
+/agentic-ai-crash-course/a-starter-agent/bin/Debug/net10.0
+/agentic-ai-crash-course/a-starter-agent/obj
+/agentic-ai-crash-course/b-structured-output/.vs
+/agentic-ai-crash-course/b-structured-output/bin/Debug/net10.0
+/agentic-ai-crash-course/b-structured-output/obj
