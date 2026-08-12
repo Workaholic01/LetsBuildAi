@@ -8,7 +8,7 @@ Each article begins with the working result from the previous article. New abstr
 
 | Part | Article | Outcome | Status |
 | ---: | --- | --- | --- |
-| 1 | [Starter agent and multi-turn conversation](01-starter-agent.md) | A configurable conversational agent with in-memory history | Complete |
+| 1 | [Starter agent and multi-turn conversation](agentic-ai-crash-course/starter-agent/StarterAgent/01-starter-agent.md) | A configurable conversational agent with in-memory history | Complete |
 | 2 | [Structured outputs](02-structured-outputs.md) | Type-safe support-ticket extraction using JSON Schema | In progress |
 | 3 | [Function tools](03-function-tools.md) | An agent loop that invokes local C# functions | Planned |
 | 4 | [Execution and streaming](04-execution-and-streaming.md) | Streaming, cancellation, retries, and execution events | Planned |
