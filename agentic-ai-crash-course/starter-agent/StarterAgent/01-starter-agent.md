@@ -1,67 +1,108 @@
-# Part 1: Build a Provider-Configurable Starter Agent in .NET
+﻿# Part 1: Build a Provider-Configurable Starter Agent in .NET
 
 **Status:** Complete  
-**Series:** [Building AI Agents in .NET](README.md)
+**Series:** [Building AI Agents in .NET](../../../README.md)
 
-> A hands-on starter agent using the official OpenAI .NET client with either OpenAI or OpenRouter.
+A minimal multi-turn AI agent built with C# and the official OpenAI .NET client. The same application can run with either **OpenAI** or **OpenRouter** through configuration—no C# changes required when switching providers.
 
-## What we are building
+> **Course:** Part 1 of *Building AI Agents in .NET*  
+> **Next:** Part 2 — Structured Outputs
 
-We will build an AI-agent crash course in C# and .NET. The implementation keeps agent behavior separate from model-provider configuration so the same application can run against OpenAI or OpenRouter without changing its C# code.
+## Features
 
-The course will progress through:
+- Provider-neutral `ChatClient` creation
+- OpenAI and OpenRouter configuration
+- API keys stored with .NET user secrets
+- Reusable agent definition
+- Multi-turn, in-memory conversation history
+- `/reset` and `/exit` console commands
+- Async model calls with cancellation support
+- Basic configuration and request error handling
 
-1. Starter agent and multi-turn conversation
-2. Structured outputs
-3. Function tools
-4. Execution and streaming
-5. Context and state
-6. Guardrails
-7. Persistent sessions
-8. Handoffs and delegation
-9. Multi-agent orchestration
-10. Tracing and observability
+## Architecture
 
-This first article focuses only on the starter agent.
+```mermaid
+flowchart TD
+    A[Console application] --> B[Personal assistant agent]
+    B --> C[Agent conversation history]
+    C --> D[Configured ChatClient]
+    D --> E{Selected provider}
+    E --> F[OpenAI]
+    E --> G[OpenRouter]
+```
+
+The application keeps three concerns separate:
+
+| Concern | Responsibility |
+| --- | --- |
+| Configuration | Selects the provider, endpoint, model, and API key |
+| Client factory | Creates one `ChatClient` for the selected provider |
+| Agent | Combines instructions, model access, and conversation history |
+
+## Project structure
+
+```text
+StarterAgent/
+├── Agents/
+│   ├── Agent.cs
+│   └── PersonalAssistantAgent.cs
+├── Configuration/
+│   └── LlmOptions.cs
+├── Infrastructure/
+│   └── LlmClientFactory.cs
+├── appsettings.json
+├── Program.cs
+└── StarterAgent.csproj
+```
 
 ## Prerequisites
 
-- A supported .NET SDK
+- A .NET SDK supported by the current `OpenAI` package
 - An OpenAI or OpenRouter API key
 - Basic familiarity with C# and `async`/`await`
 
-## 1. Create the solution
+## Setup
+
+The commands below assume you are running them from the solution root.
+
+### 1. Create the project
 
 ```bash
-mkdir dotnet-agent-crash-course
-cd dotnet-agent-crash-course
-
-dotnet new sln --name DotNetAgentCrashCourse
 dotnet new console --name StarterAgent --output src/StarterAgent
 dotnet sln add src/StarterAgent/StarterAgent.csproj
-
-dotnet add src/StarterAgent/StarterAgent.csproj package OpenAI
 ```
 
-Run the generated application before adding anything else:
+### 2. Install the packages
 
 ```bash
-dotnet run --project src/StarterAgent
-```
-
-## 2. Add provider configuration
-
-Install the configuration packages and initialize user secrets:
-
-```bash
+dotnet add src/StarterAgent package OpenAI
 dotnet add src/StarterAgent package Microsoft.Extensions.Configuration.Json
 dotnet add src/StarterAgent package Microsoft.Extensions.Configuration.EnvironmentVariables
 dotnet add src/StarterAgent package Microsoft.Extensions.Configuration.UserSecrets
 dotnet add src/StarterAgent package Microsoft.Extensions.Configuration.Binder
+```
+
+Initialize user secrets:
+
+```bash
 dotnet user-secrets init --project src/StarterAgent
 ```
 
-Create `src/StarterAgent/appsettings.json`:
+### 3. Copy `appsettings.json` to the output directory
+
+Add this inside the `<Project>` element in `StarterAgent.csproj`:
+
+```xml
+<ItemGroup>
+  <None Update="appsettings.json">
+    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+  </None>
+</ItemGroup>
+```
+
+## Provider configuration
+
+Create `appsettings.json`:
 
 ```json
 {
@@ -81,15 +122,40 @@ Create `src/StarterAgent/appsettings.json`:
 }
 ```
 
-Configure `StarterAgent.csproj` to copy the settings file:
+Set `Llm:Provider` to either `OpenAI` or `OpenRouter`.
 
-```xml
-<ItemGroup>
-  <None Update="appsettings.json">
-    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-  </None>
-</ItemGroup>
+### Store the API key
+
+For OpenAI:
+
+```bash
+dotnet user-secrets set \
+  "Llm:Providers:OpenAI:ApiKey" \
+  "YOUR_OPENAI_KEY" \
+  --project src/StarterAgent
 ```
+
+For OpenRouter:
+
+```bash
+dotnet user-secrets set \
+  "Llm:Providers:OpenRouter:ApiKey" \
+  "YOUR_OPENROUTER_KEY" \
+  --project src/StarterAgent
+```
+
+You only need to configure the provider you intend to use. Never commit API keys to `appsettings.json` or source control.
+
+You can also override configuration with environment variables. .NET maps double underscores to nested configuration keys:
+
+```bash
+export Llm__Provider="OpenRouter"
+export Llm__Providers__OpenRouter__ApiKey="YOUR_OPENROUTER_KEY"
+```
+
+## Core implementation
+
+### LLM configuration model
 
 Create `Configuration/LlmOptions.cs`:
 
@@ -99,12 +165,16 @@ namespace StarterAgent.Configuration;
 public sealed class LlmOptions
 {
     public required string Provider { get; init; }
+
     public required Dictionary<string, LlmProviderOptions> Providers { get; init; }
 
     public LlmProviderOptions GetSelectedProvider()
     {
         var match = Providers.FirstOrDefault(pair =>
-            string.Equals(pair.Key, Provider, StringComparison.OrdinalIgnoreCase));
+            string.Equals(
+                pair.Key,
+                Provider,
+                StringComparison.OrdinalIgnoreCase));
 
         return match.Value
             ?? throw new InvalidOperationException(
@@ -115,21 +185,14 @@ public sealed class LlmOptions
 public sealed class LlmProviderOptions
 {
     public required string Endpoint { get; init; }
+
     public required string Model { get; init; }
+
     public string? ApiKey { get; init; }
 }
 ```
 
-Store API keys outside source control:
-
-```bash
-dotnet user-secrets set "Llm:Providers:OpenAI:ApiKey" "YOUR_OPENAI_KEY" --project src/StarterAgent
-dotnet user-secrets set "Llm:Providers:OpenRouter:ApiKey" "YOUR_OPENROUTER_KEY" --project src/StarterAgent
-```
-
-You need to configure only the provider you intend to use.
-
-## 3. Build a provider-neutral client factory
+### Provider-neutral client factory
 
 Create `Infrastructure/LlmClientFactory.cs`:
 
@@ -153,7 +216,10 @@ public static class LlmClientFactory
                 $"No API key is configured for '{options.Provider}'.");
         }
 
-        if (!Uri.TryCreate(provider.Endpoint, UriKind.Absolute, out Uri? endpoint))
+        if (!Uri.TryCreate(
+                provider.Endpoint,
+                UriKind.Absolute,
+                out Uri? endpoint))
         {
             throw new InvalidOperationException(
                 $"The endpoint '{provider.Endpoint}' is invalid.");
@@ -173,11 +239,9 @@ public static class LlmClientFactory
 }
 ```
 
-The factory is the provider boundary. Everything above it depends on `ChatClient`, while endpoint, model, and credentials remain configuration concerns.
+Only this factory knows how provider settings become an SDK client. The rest of the application depends on `ChatClient`.
 
-## 4. Define an agent
-
-For this course, the starter agent consists of a name, instructions, a model client, and its in-memory conversation history.
+### Reusable agent
 
 Create `Agents/Agent.cs`:
 
@@ -191,7 +255,10 @@ public sealed class Agent
     private readonly ChatClient _chatClient;
     private readonly List<ChatMessage> _history;
 
-    public Agent(string name, string instructions, ChatClient chatClient)
+    public Agent(
+        string name,
+        string instructions,
+        ChatClient chatClient)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         ArgumentException.ThrowIfNullOrWhiteSpace(instructions);
@@ -204,7 +271,9 @@ public sealed class Agent
     }
 
     public string Name { get; }
+
     public string Instructions { get; }
+
     public int MessageCount => _history.Count - 1;
 
     public async Task<string> RunAsync(
@@ -217,18 +286,21 @@ public sealed class Agent
 
         try
         {
-            ChatCompletion completion = await _chatClient.CompleteChatAsync(
-                _history,
-                cancellationToken: cancellationToken);
+            ChatCompletion completion =
+                await _chatClient.CompleteChatAsync(
+                    _history,
+                    cancellationToken: cancellationToken);
 
             string response = string.Concat(
                 completion.Content.Select(part => part.Text));
 
             _history.Add(new AssistantChatMessage(response));
+
             return response;
         }
         catch
         {
+            // Do not retain a user message if its request failed.
             _history.RemoveAt(_history.Count - 1);
             throw;
         }
@@ -241,6 +313,10 @@ public sealed class Agent
     }
 }
 ```
+
+The agent stores conversation history in memory. Every request contains the system instructions followed by all successful user and assistant turns.
+
+### Personal-assistant definition
 
 Create `Agents/PersonalAssistantAgent.cs`:
 
@@ -270,16 +346,11 @@ public static class PersonalAssistantAgent
 }
 ```
 
-## 5. Run a multi-turn console conversation
+The generic `Agent` owns execution and history, while `PersonalAssistantAgent` supplies the assistant's identity and behavioral instructions.
 
-The console application creates one agent instance and reuses it for the entire loop. Because the agent retains user and assistant messages, later questions can refer to earlier turns.
+### Console application
 
-Useful commands:
-
-- `/reset` clears the current in-memory conversation.
-- `/exit` ends the application.
-
-The complete `Program.cs` appears in the accompanying implementation step.
+Replace `Program.cs`:
 
 ```csharp
 using Microsoft.Extensions.Configuration;
@@ -298,7 +369,8 @@ IConfiguration configuration = new ConfigurationBuilder()
 var llmOptions = configuration
     .GetRequiredSection("Llm")
     .Get<LlmOptions>()
-    ?? throw new InvalidOperationException("LLM configuration is missing.");
+    ?? throw new InvalidOperationException(
+        "LLM configuration is missing.");
 
 LlmProviderOptions provider = llmOptions.GetSelectedProvider();
 ChatClient chatClient = LlmClientFactory.Create(llmOptions);
@@ -334,35 +406,126 @@ while (true)
     try
     {
         string response = await agent.RunAsync(input);
-        Console.WriteLine($"\n{agent.Name}: {response}");
+
+        Console.WriteLine();
+        Console.WriteLine($"{agent.Name}: {response}");
+    }
+    catch (OperationCanceledException)
+    {
+        Console.WriteLine("The request was cancelled.");
     }
     catch (Exception exception)
     {
-        Console.Error.WriteLine($"Agent request failed: {exception.Message}");
+        Console.Error.WriteLine(
+            $"Agent request failed: {exception.Message}");
     }
 }
 ```
 
-Try this sequence:
+## Run the agent
+
+```bash
+dotnet run --project src/StarterAgent
+```
+
+Try a multi-turn conversation:
 
 ```text
 You: My name is Sam and I am learning ASP.NET Core.
-You: What am I learning?
+
+Personal Assistant: Nice to meet you, Sam! ...
+
+You: What is my name and what am I learning?
+
+Personal Assistant: Your name is Sam, and you are learning ASP.NET Core.
 ```
 
-The second answer should mention ASP.NET Core because both turns are submitted as conversation history.
+The second answer can refer to the first message because the application sends the accumulated conversation history with each request.
 
-## What we learned
+### Console commands
 
-- Provider selection belongs in configuration, not agent code.
-- Secrets should not be committed to `appsettings.json`.
-- An agent combines stable instructions with a model and an execution loop.
-- Multi-turn memory is conversation history supplied with each model request.
-- In-memory history disappears when the process exits; persistent sessions are a later concern.
+| Command | Effect |
+| --- | --- |
+| `/reset` | Clears user and assistant history while retaining the agent instructions |
+| `/exit` | Ends the application |
 
-## Next milestone
+After `/reset`, the agent should no longer know facts from earlier turns.
 
-[Part 2](02-structured-outputs.md) replaces free-form answers with a strict JSON Schema and a type-safe C# support-ticket model. Streaming stays in Part 4, where it can cover both text and tool-execution events.
+## Switch providers
+
+Change only the selected provider:
+
+```json
+{
+  "Llm": {
+    "Provider": "OpenRouter"
+  }
+}
+```
+
+Or override it without editing the file:
+
+```bash
+export Llm__Provider="OpenRouter"
+dotnet run --project src/StarterAgent
+```
+
+The agent and console code remain unchanged.
+
+## Current limitations
+
+- Conversation history exists only in memory.
+- History disappears when the process exits.
+- Every request resends the complete conversation.
+- History is not yet bounded or summarized.
+- One `Agent` instance represents one conversation and should not be shared concurrently between users.
+- The application does not yet stream response tokens.
+- Tools, guardrails, persistence, and tracing are introduced later in the series.
+
+## Troubleshooting
+
+### API key is missing
+
+Confirm the secret exists for this project:
+
+```bash
+dotnet user-secrets list --project src/StarterAgent
+```
+
+### `appsettings.json` cannot be found
+
+Confirm the file exists and the project includes:
+
+```xml
+<None Update="appsettings.json">
+  <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+</None>
+```
+
+### Provider is not configured
+
+The value of `Llm:Provider` must match a key under `Llm:Providers`, ignoring capitalization.
+
+### Model request fails
+
+Check that:
+
+- the selected provider has its own API key configured;
+- the endpoint is correct;
+- the configured model is available to your provider account;
+- the account has sufficient quota or credits.
+
+## What this project demonstrates
+
+- Provider selection is a configuration concern.
+- Credentials belong outside committed configuration.
+- An agent combines stable instructions, a model client, and an execution loop.
+- Multi-turn memory is accumulated conversation history supplied to the model.
+- Provider-neutral application code is possible when both providers expose a compatible API surface.
+
+## Next in the series
+
+Part 2, *Type-Safe Structured Outputs in .NET*, replaces free-form responses with strict JSON Schema and deserializes the result into a C# support-ticket model.
 
 ## References
 
