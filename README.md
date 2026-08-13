@@ -9,7 +9,7 @@ Each article begins with the working result from the previous article. New abstr
 | Part | Article                                                                                                  | Outcome                                                    | Status      |
 | ---: | -------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- | ----------- |
 |    1 | [Starter agent and multi-turn conversation](agentic-ai-crash-course/a-starter-agent/01-starter-agent.md) | A configurable conversational agent with in-memory history | Complete    |
-|    2 | [Structured outputs](agentic-ai-crash-course/b-structured-output/02-structured-outputs.md)               | Type-safe support-ticket extraction using JSON Schema      | In progress |
+|    2 | [Structured outputs](agentic-ai-crash-course/b-structured-output/02-structured-outputs.md)               | Type-safe support-ticket extraction using JSON Schema      | Complete    |
 |    3 | [Function tools](03-function-tools.md)                                                                   | An agent loop that invokes local C# functions              | Planned     |
 |    4 | [Execution and streaming](04-execution-and-streaming.md)                                                 | Streaming, cancellation, retries, and execution events     | Planned     |
 |    5 | [Context and state](05-context-and-state.md)                                                             | Explicit run context and controlled conversation state     | Planned     |
