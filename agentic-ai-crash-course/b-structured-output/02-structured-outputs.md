@@ -36,7 +36,8 @@ A support-ticket agent that converts an unstructured customer complaint into:
 4. Define its strict JSON Schema.
 5. Send the schema as the response format.
 6. Deserialize and display the typed result.
-7. Verify representative and malformed inputs.
+7. Handle refusals and incomplete responses.
+8. Verify representative and malformed inputs.
 
 ## Step 1: Create the project
 
@@ -542,9 +543,227 @@ The exact wording may vary, but the output must contain exactly the five schema 
 
 This is the first remote call in Part 2. If it succeeds, the complete path is working: provider configuration, strict JSON Schema, model response, and typed C# deserialization.
 
+## Step 6: Handle refusals and incomplete responses
+
+Step 5 assumed a well-behaved response: the model always returns complete JSON that matches the schema. In practice a structured-output request can fail in ways that never throw an exception on their own:
+
+- the model refuses to answer, and the refusal text arrives in `completion.Refusal` instead of `completion.Content`;
+- the response is cut off before the JSON closes (`FinishReason == ChatFinishReason.Length`);
+- a content filter, tool call, or other non-`Stop` reason ends the response early;
+- the returned text is syntactically invalid JSON, or is valid JSON that does not satisfy the `SupportTicket` contract.
+
+Calling `JsonSerializer.Deserialize` directly on any of these outcomes either throws a generic `JsonException` with no useful context, or — worse — silently accepts an incomplete result. The agent needs to detect each condition explicitly and translate it into a typed, catchable exception.
+
+### Define agent-specific exceptions
+
+Create `Agents/SupportTicketAgentException.cs`:
+
+```csharp
+namespace StructuredOutputAgent.Agents;
+
+public abstract class SupportTicketAgentException : Exception
+{
+    protected SupportTicketAgentException(string message)
+        : base(message)
+    {
+    }
+
+    protected SupportTicketAgentException(
+        string message,
+        Exception innerException)
+        : base(message, innerException)
+    {
+    }
+}
+
+public sealed class ModelRefusalException
+    : SupportTicketAgentException
+{
+    public ModelRefusalException(string refusal)
+        : base("The model refused to create a support ticket.")
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(refusal);
+        Refusal = refusal;
+    }
+
+    public string Refusal { get; }
+}
+
+public sealed class InvalidModelResponseException
+    : SupportTicketAgentException
+{
+    public InvalidModelResponseException(string message)
+        : base(message)
+    {
+    }
+
+    public InvalidModelResponseException(
+        string message,
+        Exception innerException)
+        : base(message, innerException)
+    {
+    }
+}
+```
+
+- `SupportTicketAgentException` is the shared base type, so callers can catch every agent-specific failure with a single `catch` clause, or catch each subtype individually when they need different handling.
+- `ModelRefusalException` preserves the model's own refusal explanation in the `Refusal` property instead of discarding it.
+- `InvalidModelResponseException` covers every other unusable response — truncation, content-filter stops, unexpected finish reasons, and malformed JSON — with an optional inner exception so the original diagnostic context (for example, the underlying `JsonException`) is never lost.
+
+### Detect refusals and non-stop finish reasons before parsing
+
+Update `AnalyzeAsync` in `Agents/SupportTicketAgent.cs` to inspect the completion before touching its content:
+
+```csharp
+public async Task<SupportTicket> AnalyzeAsync(
+    string complaint,
+    CancellationToken cancellationToken = default)
+{
+    ArgumentException.ThrowIfNullOrWhiteSpace(complaint);
+
+    List<ChatMessage> messages =
+    [
+        new SystemChatMessage(Instructions),
+        new UserChatMessage(complaint)
+    ];
+
+    ChatCompletion completion = await _chatClient.CompleteChatAsync(
+        messages,
+        _completionOptions,
+        cancellationToken);
+
+    if (!string.IsNullOrWhiteSpace(completion.Refusal))
+    {
+        throw new ModelRefusalException(completion.Refusal);
+    }
+
+    if (completion.FinishReason != ChatFinishReason.Stop)
+    {
+        string message = completion.FinishReason switch
+        {
+            ChatFinishReason.Length =>
+                "The model response ended before the JSON was complete.",
+
+            ChatFinishReason.ContentFilter =>
+                "The model response was stopped by a content filter.",
+
+            ChatFinishReason.ToolCalls =>
+                "The model returned unexpected tool calls.",
+
+            ChatFinishReason.FunctionCall =>
+                "The model returned an obsolete function call.",
+
+            _ =>
+                $"The model stopped for an unexpected reason: " +
+                $"{completion.FinishReason}."
+        };
+
+        throw new InvalidModelResponseException(message);
+    }
+
+    string json = string.Concat(
+        completion.Content
+            .Where(part =>
+                part.Kind == ChatMessageContentPartKind.Text)
+            .Select(part => part.Text));
+
+    if (string.IsNullOrWhiteSpace(json))
+    {
+        throw new InvalidModelResponseException(
+            "The provider returned no structured content.");
+    }
+
+    try
+    {
+        return JsonSerializer.Deserialize<SupportTicket>(
+            json,
+            JsonDefaults.Options)
+            ?? throw new JsonException(
+                "The structured response was empty.");
+    }
+    catch (JsonException exception)
+    {
+        throw new InvalidModelResponseException(
+            "The response did not match the SupportTicket contract.",
+            exception);
+    }
+}
+```
+
+Two checks run before any JSON parsing is attempted:
+
+1. **Refusal check.** `completion.Refusal` is populated instead of `completion.Content` when the model declines to respond. Checking it first means a refusal surfaces as a clear `ModelRefusalException` carrying the model's own explanation, rather than failing later with an opaque JSON error.
+2. **Finish-reason check.** Any `FinishReason` other than `Stop` means the content is not a complete, well-formed answer. `Length` indicates truncation (the JSON was cut off mid-object), `ContentFilter` indicates moderation intervened, and `ToolCalls`/`FunctionCall` indicate the model deviated from the expected response format entirely. Each case is mapped to a specific, human-readable message before parsing is attempted.
+
+Only after both checks pass does the method extract the text content and hand it to `JsonSerializer.Deserialize`. The existing `catch (JsonException)` block still wraps malformed or contract-violating JSON in `InvalidModelResponseException`, keeping the original `JsonException` as the inner exception for diagnostics.
+
+### Map exceptions to console output in `Program.cs`
+
+Wrap the call to `AnalyzeAsync` so each failure mode produces a distinct, actionable message instead of an unhandled stack trace:
+
+```csharp
+using System.ClientModel;
+
+try
+{
+    SupportTicket ticket = await agent.AnalyzeAsync(complaint);
+
+    Console.WriteLine("\nStructured ticket:");
+    Console.WriteLine(
+        JsonSerializer.Serialize(ticket, JsonDefaults.Options));
+}
+catch (ModelRefusalException exception)
+{
+    Console.Error.WriteLine(
+        $"\nThe request was refused: {exception.Refusal}");
+}
+catch (InvalidModelResponseException exception)
+{
+    Console.Error.WriteLine(
+        $"\nThe model returned an unusable response: " +
+        $"{exception.Message}");
+
+    if (exception.InnerException is not null)
+    {
+        Console.Error.WriteLine(
+            $"Cause: {exception.InnerException.Message}");
+    }
+}
+catch (ClientResultException exception)
+{
+    Console.Error.WriteLine(
+        $"\nProvider request failed (HTTP {exception.Status}).");
+    Console.Error.WriteLine(exception.Message);
+}
+catch (OperationCanceledException)
+{
+    Console.Error.WriteLine("\nThe request was cancelled.");
+}
+```
+
+Each `catch` clause targets exactly one failure category:
+
+| Exception                       | Cause                                                                             | What the message tells the user                                                     |
+| ------------------------------- | --------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| `ModelRefusalException`         | The model declined to produce a ticket                                            | The model's own refusal text                                                        |
+| `InvalidModelResponseException` | Truncation, content filter, unexpected finish reason, or bad JSON                 | A specific description, plus the inner exception if the cause was a `JsonException` |
+| `ClientResultException`         | The HTTP request to the provider failed (auth, quota, unsupported model, network) | The HTTP status code and provider error body                                        |
+| `OperationCanceledException`    | The `CancellationToken` was cancelled                                             | A simple cancellation notice                                                        |
+
+`ClientResultException` comes from the OpenAI SDK's transport layer, so it also catches the case where the selected model does not support Structured Outputs at all — the provider rejects the request before any completion is returned.
+
+### Try it: observe a refusal or truncation without crashing
+
+Because `Program.cs` no longer lets exceptions propagate unhandled, both failure modes are safe to trigger:
+
+- **Refusal.** Send a complaint that asks the agent to do something outside its scope, for example requesting another customer's private data. If the provider's safety system declines, the console prints `The request was refused: ...` instead of an unhandled exception.
+- **Truncation.** Temporarily set a very low `MaxOutputTokenCount` on `_completionOptions` and submit a long complaint. The response is cut off before the JSON closes, `FinishReason` becomes `Length`, and the console prints `The model returned an unusable response: The model response ended before the JSON was complete.` Remove the limit afterward.
+
+In both cases the application exits cleanly with a clear diagnostic message, and the original cause — the model's refusal text or the underlying `JsonException` — remains available for logging.
+
 ## Next implementation step
 
-Harden the agent for refusal, truncated output, invalid JSON, unsupported models, and provider errors without losing the original diagnostic context.
+Verify the agent end-to-end with representative complaints and deliberately malformed or edge-case inputs, confirming that valid complaints produce well-formed tickets and that every failure path from Step 6 produces the expected message.
 
 ## Reference
 

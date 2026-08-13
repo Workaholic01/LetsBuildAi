@@ -56,12 +56,44 @@ public sealed class SupportTicketAgent
             _completionOptions,
             cancellationToken);
 
+        if (!string.IsNullOrWhiteSpace(completion.Refusal))
+        {
+            throw new ModelRefusalException(completion.Refusal);
+        }
+
+        if (completion.FinishReason != ChatFinishReason.Stop)
+        {
+            string message = completion.FinishReason switch
+            {
+                ChatFinishReason.Length =>
+                    "The model response ended before the JSON was complete.",
+
+                ChatFinishReason.ContentFilter =>
+                    "The model response was stopped by a content filter.",
+
+                ChatFinishReason.ToolCalls =>
+                    "The model returned unexpected tool calls.",
+
+                ChatFinishReason.FunctionCall =>
+                    "The model returned an obsolete function call.",
+
+                _ =>
+                    $"The model stopped for an unexpected reason: " +
+                    $"{completion.FinishReason}."
+            };
+
+            throw new InvalidModelResponseException(message);
+        }
+
         string json = string.Concat(
-            completion.Content.Select(part => part.Text));
+            completion.Content
+                .Where(part =>
+                    part.Kind == ChatMessageContentPartKind.Text)
+                .Select(part => part.Text));
 
         if (string.IsNullOrWhiteSpace(json))
         {
-            throw new InvalidOperationException(
+            throw new InvalidModelResponseException(
                 "The provider returned no structured content.");
         }
 
@@ -75,7 +107,7 @@ public sealed class SupportTicketAgent
         }
         catch (JsonException exception)
         {
-            throw new InvalidOperationException(
+            throw new InvalidModelResponseException(
                 "The response did not match the SupportTicket contract.",
                 exception);
         }

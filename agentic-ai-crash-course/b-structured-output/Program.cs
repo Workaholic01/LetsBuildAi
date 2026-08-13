@@ -6,6 +6,7 @@ using OpenAI.Chat;
 using StructuredOutputAgent.Models;
 using StructuredOutputAgent.Serialization;
 using System.Text.Json;
+using System.ClientModel;
 
 IConfiguration configuration = new ConfigurationBuilder()
     .SetBasePath(AppContext.BaseDirectory)
@@ -37,8 +38,38 @@ if (string.IsNullOrWhiteSpace(complaint))
     return;
 }
 
-SupportTicket ticket = await agent.AnalyzeAsync(complaint);
+try
+{
+    SupportTicket ticket = await agent.AnalyzeAsync(complaint);
 
-Console.WriteLine("\nStructured ticket:");
-Console.WriteLine(
-    JsonSerializer.Serialize(ticket, JsonDefaults.Options));
+    Console.WriteLine("\nStructured ticket:");
+    Console.WriteLine(
+        JsonSerializer.Serialize(ticket, JsonDefaults.Options));
+}
+catch (ModelRefusalException exception)
+{
+    Console.Error.WriteLine(
+        $"\nThe request was refused: {exception.Refusal}");
+}
+catch (InvalidModelResponseException exception)
+{
+    Console.Error.WriteLine(
+        $"\nThe model returned an unusable response: " +
+        $"{exception.Message}");
+
+    if (exception.InnerException is not null)
+    {
+        Console.Error.WriteLine(
+            $"Cause: {exception.InnerException.Message}");
+    }
+}
+catch (ClientResultException exception)
+{
+    Console.Error.WriteLine(
+        $"\nProvider request failed (HTTP {exception.Status}).");
+    Console.Error.WriteLine(exception.Message);
+}
+catch (OperationCanceledException)
+{
+    Console.Error.WriteLine("\nThe request was cancelled.");
+}
