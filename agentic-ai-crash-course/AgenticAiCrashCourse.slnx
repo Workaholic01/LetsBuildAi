@@ -2,5 +2,6 @@
   <Project Path="a-starter-agent/StarterAgent.csproj" />
   <Project Path="b-1-structured-output/StructuredOutputAgent.csproj" />
   <Project Path="b-2-structured-product-review-agent/ProductReviewAgent.csproj" />
+  <Project Path="c-1-tool-calling/ToolUsingAgent/ToolUsingAgent.csproj" Id="21c6836c-3091-4bbf-99bc-d64e1aae4f3d" />
   <Project Path="LLMSupport/LLMSupport.csproj" />
 </Solution>
