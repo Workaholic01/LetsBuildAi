@@ -25,7 +25,7 @@ The agent can chain multiple tool calls in a single turn — for example, asking
 - Deserialize a tool call's arguments into a typed C# record.
 - Implement the request/execute/respond loop the Chat Completions API expects.
 - Keep a single bad tool call from crashing the whole turn.
-- Recognize which parts of the OpenAI Agents SDK model (Python) do not map onto the raw Chat Completions API, and why.
+- Recognize which OpenAI-hosted tool capabilities fall outside the Chat Completions API, and why.
 
 ## Implementation plan
 
@@ -78,7 +78,7 @@ dotnet run --project c-1-tool-calling/ToolUsingAgent
 
 ## Step 2: A tool as data plus behavior
 
-Python's `agents` SDK derives a tool's JSON Schema from type hints and a docstring via the `@function_tool` decorator. The raw `OpenAI.Chat` SDK has no such decorator: a tool is just a `ChatTool` (the schema the model sees) that has to be paired, by hand, with the C# code that runs when the model asks for it.
+The `OpenAI.Chat` SDK has no decorator or attribute that turns a C# method into a tool automatically: a tool is just a `ChatTool` (the schema the model sees) that has to be paired, by hand, with the C# code that runs when the model asks for it.
 
 Create `Tools/ToolDefinition.cs`:
 
@@ -653,12 +653,11 @@ What's the weather on the moon?
 
 `get_weather` has no special handling for this — it will return its mock string regardless of city — which is a good moment to notice that a mock tool cannot demonstrate real-world failure. To actually exercise `InvokeToolAsync`'s error handling, temporarily throw inside `InvokeGetWeatherAsync` (for example, `throw new InvalidOperationException("simulated failure");`) and rerun the same prompt. The console should still print a coherent final answer — built from the model reacting to an `Error: ...` tool result — instead of crashing. Remove the temporary throw afterward.
 
-## What does not carry over from the Python SDK
+## What is out of scope for this part
 
-The Python `agents` SDK groups tool calling into three ideas: custom function tools, OpenAI-hosted built-in tools (`WebSearchTool`, `CodeInterpreterTool`), and agents exposed as tools to an orchestrator. Only the first maps cleanly onto the raw Chat Completions API used here:
+OpenAI also offers hosted tools — a web-search tool and a code-interpreter tool that run entirely on OpenAI's infrastructure — but these belong to the newer *Responses API*, not Chat Completions. There is no `ChatTool` equivalent that invokes them from `ChatCompletionOptions`; they are a different request shape entirely. Reaching them from `.NET` would mean switching API surfaces, which is a separate lesson from tool calling itself and is left for a later part.
 
-- **Built-in tools are out of scope for this part.** `WebSearchTool` and `CodeInterpreterTool` are OpenAI-hosted tools that belong to the newer *Responses API*, not Chat Completions. There is no `ChatTool` equivalent that invokes them — they are a different request shape entirely. Reaching them from `.NET` would mean switching API surfaces, which is a separate lesson from tool calling itself.
-- **Agents-as-tools does map, and reuses everything built here.** An agent used as a tool is just a `ToolDefinition` whose `InvokeAsync` happens to run another `ChatClient` conversation instead of a calculator or lookup, and returns that conversation's final text. No new abstraction is needed — `ToolAgent`'s loop, `ChatCompletionOptions.Tools`, and the `ToolDefinition` record all stay exactly as they are.
+An agent exposed as a tool to another, orchestrating agent is not out of scope in the same way — it reuses everything built in this part. An agent used as a tool is just a `ToolDefinition` whose `InvokeAsync` runs another `ChatClient` conversation instead of a calculator or lookup, and returns that conversation's final text. No new abstraction is needed — `ToolAgent`'s loop, `ChatCompletionOptions.Tools`, and the `ToolDefinition` record all stay exactly as they are. That composition is the next implementation step below.
 
 ## Next implementation step
 
