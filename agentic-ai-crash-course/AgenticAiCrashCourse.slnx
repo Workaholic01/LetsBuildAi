@@ -1,4 +1,7 @@
 <Solution>
+  <Folder Name="/c-2-agents-as-tools/">
+    <Project Path="c-2-agents-as-tools/AgentsAsToolsAgent.csproj" />
+  </Folder>
   <Project Path="a-starter-agent/StarterAgent.csproj" />
   <Project Path="b-1-structured-output/StructuredOutputAgent.csproj" />
   <Project Path="b-2-structured-product-review-agent/ProductReviewAgent.csproj" />
