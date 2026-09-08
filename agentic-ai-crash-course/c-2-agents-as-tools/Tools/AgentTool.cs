@@ -51,6 +51,7 @@ public static class AgentTool
         string argumentsJson,
         ToolAgent agent)
     {
+        Console.WriteLine($"Invoking agent: {agent.Name}");
         InvokeAgentArgs args = Deserialize<InvokeAgentArgs>(argumentsJson);
 
         try

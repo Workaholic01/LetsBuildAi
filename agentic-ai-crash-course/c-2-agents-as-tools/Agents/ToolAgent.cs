@@ -1,5 +1,7 @@
 using OpenAI.Chat;
 using AgentsAsToolsAgent.Tools;
+using System.Text.Json.Serialization;
+using System.Text.Json;
 
 namespace AgentsAsToolsAgent.Agents;
 
@@ -54,6 +56,8 @@ public sealed class ToolAgent
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(input);
 
+        Console.WriteLine($"[{Name}] Received user input: \"{input}\"");
+        Console.WriteLine($"[{Name}] Thinking about how to respond, will consult the model...");
         int checkpoint = _history.Count;
         _history.Add(new UserChatMessage(input));
 
@@ -61,25 +65,46 @@ public sealed class ToolAgent
         {
             for (int round = 0; round < MaxToolCallRounds; round++)
             {
+                Console.WriteLine($"[{Name}] Round {round + 1}/{MaxToolCallRounds}: sending conversation to the model.");
+
                 ChatCompletion completion =
                     await _chatClient.CompleteChatAsync(
                         _history,
                         _completionOptions,
                         cancellationToken);
 
+                //log formatted json in console.
+                var options = new JsonSerializerOptions
+                {
+                    WriteIndented = true
+                };
+                //Console.WriteLine($"Completion: {JsonSerializer.Serialize(completion , options)}");
+
                 if (completion.FinishReason == ChatFinishReason.ToolCalls)
                 {
+                    Console.WriteLine(
+                        $"[{Name}] Decided it needs help from {completion.ToolCalls.Count} tool(s) " +
+                        "before it can answer. Delegating now...");
+
                     _history.Add(new AssistantChatMessage(completion));
 
                     foreach (ChatToolCall toolCall in completion.ToolCalls)
                     {
+                        Console.WriteLine(
+                            $"[{Name}] -> Calling tool '{toolCall.FunctionName}' " +
+                            $"with arguments: {toolCall.FunctionArguments}");
+
                         string result = await InvokeToolAsync(
                             toolCall,
                             cancellationToken);
 
+                        Console.WriteLine(
+                            $"[{Name}] <- Tool '{toolCall.FunctionName}' returned: {result}");
+
                         _history.Add(new ToolChatMessage(toolCall.Id, result));
                     }
 
+                    Console.WriteLine($"[{Name}] Reviewing tool results and deciding next step...");
                     continue;
                 }
 
@@ -87,6 +112,8 @@ public sealed class ToolAgent
                 {
                     string response = string.Concat(
                         completion.Content.Select(part => part.Text));
+
+                    Console.WriteLine($"[{Name}] Has enough information to answer. Finalizing response.");
 
                     _history.Add(new AssistantChatMessage(response));
 
@@ -104,6 +131,7 @@ public sealed class ToolAgent
         }
         catch
         {
+            Console.WriteLine($"[{Name}] Encountered an error mid-turn; discarding partial progress.");
             // Do not retain a turn whose request failed partway through.
             _history.RemoveRange(checkpoint, _history.Count - checkpoint);
             throw;
